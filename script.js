@@ -161,25 +161,47 @@ function categorise(txns, rules) {
 function computeCategoryTotals(txns) {
   const byCat = new Map();
   for (const t of txns) {
-    const cat = (t.category || 'UNCATEGORISED').toUpperCase(); const displayCat = toTitleCase(cat);
-    byCat.set(cat, (byCat.get(cat) || 0) + t.amount);
+    const cat = (t.category || 'UNCATEGORISED').toUpperCase();
+    byCat.set(cat, (byCat.get(cat) || 0) + (Number(t.amount)||0));
   }
+  const rows = [...byCat.entries()].sort((a,b) => Math.abs(b[1]) - Math.abs(a[1]));
+  const grand = rows.reduce((acc, [,v]) => acc + v, 0);
+  return { rows, grand };
+}
   const rows = [...byCat.entries()].sort((a,b) => b[1]-a[1]);
   const grand = rows.reduce((acc, [,v]) => acc + v, 0);
   return { rows, grand };
 }
 
-function renderMonthSummary(txns);
-  renderCategoryTotals(txns) {
+function renderCategoryTotals(txns) {
   const { rows, grand } = computeCategoryTotals(txns);
   const totalsDiv = document.getElementById('categoryTotals');
-  let html = '<table class="cats"><colgroup><col class="col-cat"><col class="col-total"><col class="col-pct"></colgroup><thead><tr><th>Category</th><th class="num">Total</th><th class="num">%</th></tr></thead><tbody>';
-  for (const [cat, total] of rows) {
-    html += `<tr>
-      <td><a class="catlink" data-cat="${escapeHtml(cat)}"><span class=\"category-name\">${escapeHtml(toTitleCase(cat))}</span></a></td>
-      <td class=\"num\">${total.toFixed(2)}</td><td class=\"num\">${(grand ? (total / grand * 100) : 0).toFixed(1)}%</td>
-    </tr>`;
+  let html = '<table class="cats polished"><colgroup><col class="col-cat"><col class="col-num"><col class="col-num"></colgroup>';
+  html += '<thead><tr><th>Category</th><th class="num">Total</th><th class="num">%</th></tr></thead><tbody>';
+  if (!rows.length){
+    html += '<tr><td colspan="3" class="muted">No data for this month</td></tr>';
+  } else {
+    for (const [cat, total] of rows) {
+      const pct = grand ? (total / grand * 100) : 0;
+      html += `<tr>
+        <td><a class="catlink" data-cat="${escapeHtml(cat)}"><span class="category-name">${escapeHtml(toTitleCase(cat))}</span></a></td>
+        <td class="num ${total < 0 ? 'neg' : 'pos'}">${toMoneyPretty(total)}</td>
+        <td class="num">${pct.toFixed(1)}%</td>
+      </tr>`;
+    }
   }
+  html += `</tbody><tfoot><tr><td>Total</td><td class="num ${grand < 0 ? 'neg' : 'pos'}">${toMoneyPretty(grand)}</td><td class="num">100.0%</td></tr></tfoot></table>`;
+  totalsDiv.innerHTML = html;
+
+  totalsDiv.querySelectorAll('a.catlink').forEach(a => {
+    a.addEventListener('click', () => {
+      CURRENT_FILTER = a.getAttribute('data-cat');
+      try { localStorage.setItem(LS_KEYS.FILTER, CURRENT_FILTER || ''); } catch {}
+      updateFilterUI(); CURRENT_PAGE = 1;
+      renderTransactionsTable();
+    });
+  });
+}
   html += `</tbody><tfoot><tr><td>Total</td><td class=\"num\">${grand.toFixed(2)}</td><td class=\"num\">100%</td></tr></tfoot></table>`;
   totalsDiv.innerHTML = html;
 
@@ -603,21 +625,3 @@ function renderAdvancedScreen(){
     window.applyRulesAndRender._advWrapped = true;
   }
 })();
-function renderMonthSummary(txns){
-  // Compute Debit (sum of negatives), Credit (sum of positives), Net (Debit + Credit)
-  let debit = 0, credit = 0;
-  for (const t of txns){
-    const a = Number(t.amount) || 0;
-    if (a < 0) debit += a; else credit += a;
-  }
-  const net = debit + credit;
-  const el = document.getElementById('monthSummary');
-  if (!el) return;
-  const mk = MONTH_FILTER ? monthLabel(MONTH_FILTER) : 'All months';
-  el.innerHTML = `
-    <span class="chip">Showing <b>${txns.length}</b> txns — ${escapeHtml(mk)}</span>
-    <span class="chip">Debit: <b class="neg">${toMoneyPretty(debit)}</b></span>
-    <span class="chip">Credit: <b>${toMoneyPretty(credit)}</b></span>
-    <span class="chip">Net: <b class="${net<0?'neg':''}">${toMoneyPretty(net)}</b></span>
-  `;
-}

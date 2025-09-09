@@ -169,6 +169,9 @@ section.card { padding-left: 10px; }
 .hide-simple main > :not(#advancedCard) { display: none !important; }
 .hide-simple #advancedCard { display: block !important; }
 
-.summary-line{ margin:6px 0 8px; font-weight:700; }
-.summary-line .chip{ display:inline-block; padding:6px 10px; margin-right:8px; border-radius:999px; border:2px solid var(--border); background:#fff; }
-.summary-line .neg{ color:#c2410c; }
+/* Polished Category Totals */
+table.cats.polished .num{ text-align:right; font-variant-numeric: tabular-nums; font-weight:800; }
+table.cats.polished .category-name{ text-transform: capitalize; }
+table.cats.polished tbody tr:nth-child(odd){ background: rgba(0,0,0,0.02); }
+.num.neg{ color:#c2410c; }
+.num.pos{ color:#0f172a; }
