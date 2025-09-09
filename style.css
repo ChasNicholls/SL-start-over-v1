@@ -158,20 +158,15 @@ section.card { padding-left: 10px; }
 }
 
 
-/* Advanced mode toggling */
-.mode-buttons { padding: 8px 16px; background: rgba(0,0,0,0.02); border-bottom: 2px solid var(--border); }
-.mode-buttons button { margin-right: 8px; padding: 8px 12px; font-weight: 700; border-radius: 10px; border: 2px solid var(--border); background: #fff; cursor: pointer; }
-.mode-buttons button:hover { background: #f8f8f8; }
-.pill { display:inline-block; padding: 6px 10px; border: 2px solid var(--border); border-radius: 999px; margin: 4px 6px 8px 0; background: #fff; }
-.row { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
-.muted { color: var(--muted); }
-.num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 800; }
-.hide-simple main > :not(#advancedCard) { display: none !important; }
-.hide-simple #advancedCard { display: block !important; }
-
-/* Polished Category Totals */
-table.cats.polished .num{ text-align:right; font-variant-numeric: tabular-nums; font-weight:800; }
-table.cats.polished .category-name{ text-transform: capitalize; }
-table.cats.polished tbody tr:nth-child(odd){ background: rgba(0,0,0,0.02); }
-.num.neg{ color:#c2410c; }
-.num.pos{ color:#0f172a; }
+/* Advanced button */
+.header-actions { margin-top: 4px; }
+.header-actions .btn-adv {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(0,0,0,.15);
+  background: #fff;
+  text-decoration: none;
+  font-weight: 600;
+}
+.header-actions .btn-adv:hover { background: #f5f5f5; }

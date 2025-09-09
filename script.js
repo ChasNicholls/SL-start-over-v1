@@ -58,9 +58,7 @@ function loadCsvText(csvText) {
     if (!effectiveDate && !longDesc) continue;
     txns.push({ date: effectiveDate, amount: debit, description: longDesc });
   }
-  CURRENT_TXNS = txns;
-  // Persist parsed rows for re-hydration
-  try { localStorage.setItem('spendlite_rows_v1', JSON.stringify(CURRENT_TXNS)); } catch {}
+  CURRENT_TXNS = txns; saveTxnsToLocalStorage();
   rebuildMonthDropdown();
   applyRulesAndRender();
   return txns;
@@ -161,13 +159,9 @@ function categorise(txns, rules) {
 function computeCategoryTotals(txns) {
   const byCat = new Map();
   for (const t of txns) {
-    const cat = (t.category || 'UNCATEGORISED').toUpperCase();
-    byCat.set(cat, (byCat.get(cat) || 0) + (Number(t.amount)||0));
+    const cat = (t.category || 'UNCATEGORISED').toUpperCase(); const displayCat = toTitleCase(cat);
+    byCat.set(cat, (byCat.get(cat) || 0) + t.amount);
   }
-  const rows = [...byCat.entries()].sort((a,b) => Math.abs(b[1]) - Math.abs(a[1]));
-  const grand = rows.reduce((acc, [,v]) => acc + v, 0);
-  return { rows, grand };
-}
   const rows = [...byCat.entries()].sort((a,b) => b[1]-a[1]);
   const grand = rows.reduce((acc, [,v]) => acc + v, 0);
   return { rows, grand };
@@ -176,32 +170,13 @@ function computeCategoryTotals(txns) {
 function renderCategoryTotals(txns) {
   const { rows, grand } = computeCategoryTotals(txns);
   const totalsDiv = document.getElementById('categoryTotals');
-  let html = '<table class="cats polished"><colgroup><col class="col-cat"><col class="col-num"><col class="col-num"></colgroup>';
-  html += '<thead><tr><th>Category</th><th class="num">Total</th><th class="num">%</th></tr></thead><tbody>';
-  if (!rows.length){
-    html += '<tr><td colspan="3" class="muted">No data for this month</td></tr>';
-  } else {
-    for (const [cat, total] of rows) {
-      const pct = grand ? (total / grand * 100) : 0;
-      html += `<tr>
-        <td><a class="catlink" data-cat="${escapeHtml(cat)}"><span class="category-name">${escapeHtml(toTitleCase(cat))}</span></a></td>
-        <td class="num ${total < 0 ? 'neg' : 'pos'}">${toMoneyPretty(total)}</td>
-        <td class="num">${pct.toFixed(1)}%</td>
-      </tr>`;
-    }
+  let html = '<table class="cats"><colgroup><col class="col-cat"><col class="col-total"><col class="col-pct"></colgroup><thead><tr><th>Category</th><th class="num">Total</th><th class="num">%</th></tr></thead><tbody>';
+  for (const [cat, total] of rows) {
+    html += `<tr>
+      <td><a class="catlink" data-cat="${escapeHtml(cat)}"><span class=\"category-name\">${escapeHtml(toTitleCase(cat))}</span></a></td>
+      <td class=\"num\">${total.toFixed(2)}</td><td class=\"num\">${(grand ? (total / grand * 100) : 0).toFixed(1)}%</td>
+    </tr>`;
   }
-  html += `</tbody><tfoot><tr><td>Total</td><td class="num ${grand < 0 ? 'neg' : 'pos'}">${toMoneyPretty(grand)}</td><td class="num">100.0%</td></tr></tfoot></table>`;
-  totalsDiv.innerHTML = html;
-
-  totalsDiv.querySelectorAll('a.catlink').forEach(a => {
-    a.addEventListener('click', () => {
-      CURRENT_FILTER = a.getAttribute('data-cat');
-      try { localStorage.setItem(LS_KEYS.FILTER, CURRENT_FILTER || ''); } catch {}
-      updateFilterUI(); CURRENT_PAGE = 1;
-      renderTransactionsTable();
-    });
-  });
-}
   html += `</tbody><tfoot><tr><td>Total</td><td class=\"num\">${grand.toFixed(2)}</td><td class=\"num\">100%</td></tr></tfoot></table>`;
   totalsDiv.innerHTML = html;
 
@@ -246,6 +221,7 @@ function applyRulesAndRender() { CURRENT_PAGE = 1;
   renderMonthTotals();
   renderCategoryTotals(txns);
   renderTransactionsTable(txns);
+  saveTxnsToLocalStorage();
 }
 
 
@@ -420,19 +396,6 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   updateFilterUI(); CURRENT_PAGE = 1;
   updateMonthBanner();
-
-  // --- Restore transactions if present (persistence) ---
-  try {
-    const savedRows = localStorage.getItem('spendlite_rows_v1');
-    if (savedRows) {
-      const rows = JSON.parse(savedRows);
-      if (Array.isArray(rows) && rows.length) {
-        CURRENT_TXNS = rows;
-        rebuildMonthDropdown();
-        applyRulesAndRender();
-      }
-    }
-  } catch {}
 });
 
 const SAMPLE_RULES = `# Rules format: KEYWORD => CATEGORY
@@ -521,107 +484,4 @@ function renderPager(totalPages) {
 }
 
 
-
-// ===== Advanced Mode Integration =====
-function monthLabelFromKey(mk){
-  if (!mk) return "All months";
-  const parts = String(mk).split('-');
-  const y = parseInt(parts[0]||'0',10), m = parseInt(parts[1]||'0',10);
-  const names = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-  if (!y || !m) return mk;
-  return names[m-1] + " " + y;
-}
-function latestMonthKeyFromTxns(txns){
-  const set = new Set();
-  for (const t of txns||[]){
-    const d = parseDateSmart(t.date);
-    if (!d || isNaN(d)) continue;
-    set.add(yyyymm(d));
-  }
-  const arr = Array.from(set).sort();
-  return arr[arr.length-1] || null;
-}
-function prevMonthKey(mk){
-  if (!mk) return null;
-  const parts = String(mk).split('-');
-  const y = parseInt(parts[0]||'0',10), m = parseInt(parts[1]||'0',10);
-  const d = new Date(y, (m-1)-1, 1);
-  return yyyymm(d);
-}
-function txnsForMonth(mk){
-  if (!mk) return CURRENT_TXNS;
-  return CURRENT_TXNS.filter(t => {
-    const d = parseDateSmart(t.date);
-    return d && yyyymm(d) === mk;
-  });
-}
-function sumByCategoryForMonth(mk){
-  const tx = txnsForMonth(mk);
-  const byCat = new Map();
-  let total = 0;
-  for (const t of tx){
-    const cat = (t.category || 'UNCATEGORISED').toUpperCase();
-    const amt = Number(t.amount) || 0;
-    byCat.set(cat, (byCat.get(cat)||0) + amt);
-    total += amt;
-  }
-  const rows = [...byCat.entries()].sort((a,b)=>Math.abs(b[1]) - Math.abs(a[1]));
-  return {rows, total};
-}
-function renderAdvancedScreen(){
-  const adv = document.getElementById('advancedCard');
-  if (!adv) return;
-  const mk = MONTH_FILTER || latestMonthKeyFromTxns(CURRENT_TXNS);
-  const mkPrev = prevMonthKey(mk);
-  document.getElementById('advMonth').textContent = monthLabelFromKey(mk);
-  document.getElementById('advPrev').textContent = monthLabelFromKey(mkPrev);
-  const a = sumByCategoryForMonth(mk);
-  const b = sumByCategoryForMonth(mkPrev);
-  document.getElementById('advA').textContent = '$' + (a.total||0).toFixed(2);
-  document.getElementById('advB').textContent = '$' + (b.total||0).toFixed(2);
-  document.getElementById('advDiff').textContent = '$' + ((b.total||0) - (a.total||0)).toFixed(2);
-  const tb = document.getElementById('advTopBody');
-  tb.innerHTML = a.rows.length ? '' : '<tr><td colspan="2" class="muted">No data</td></tr>';
-  a.rows.slice(0,12).forEach(([cat, val]) => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${escapeHtml(cat)}</td><td class="num">${val.toFixed(2)}</td>`;
-    tb.appendChild(tr);
-  });
-}
-(function wireAdvanced(){
-  const btnAdv = document.getElementById('btnAdvanced');
-  const btnBack = document.getElementById('btnBackSimple');
-  if (btnAdv && !btnAdv._bound){
-    btnAdv.addEventListener('click', () => {
-      document.body.classList.add('hide-simple');
-      btnAdv.style.display = 'none';
-      if (btnBack) btnBack.style.display = '';
-      renderAdvancedScreen();
-    });
-    btnAdv._bound = true;
-  }
-  if (btnBack && !btnBack._bound){
-    btnBack.addEventListener('click', () => {
-      document.body.classList.remove('hide-simple');
-      btnBack.style.display = 'none';
-      if (btnAdv) btnAdv.style.display = '';
-    });
-    btnBack._bound = true;
-  }
-  const monthSel = document.getElementById('monthFilter');
-  if (monthSel && !monthSel._advBound){
-    monthSel.addEventListener('change', () => {
-      if (document.body.classList.contains('hide-simple')) renderAdvancedScreen();
-    });
-    monthSel._advBound = true;
-  }
-  const _origApply = window.applyRulesAndRender;
-  if (typeof _origApply === 'function' && !_origApply._advWrapped){
-    window.applyRulesAndRender = function(){
-      const rv = _origApply.apply(this, arguments);
-      if (document.body.classList.contains('hide-simple')) renderAdvancedScreen();
-      return rv;
-    };
-    window.applyRulesAndRender._advWrapped = true;
-  }
-})();
+function saveTxnsToLocalStorage(){try{localStorage.setItem(LS_KEYS.TXNS_JSON, JSON.stringify(CURRENT_TXNS||[]));}catch{}}
